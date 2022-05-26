@@ -8,6 +8,9 @@ import time
 import sys
 
 
+name = input("Enter your name: ").split("#")
+
+
 def generate_color():
     color = '#{:02x}{:02x}{:02x}'.format(*map(lambda x: random.randint(0, 255), range(3)))
     return color
@@ -53,6 +56,7 @@ def showPlotsMinimap(name, tag):
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.67 Safari/537.36"}).json()["data"]
         for i in range(len(data)):
             print(data[i]["metadata"]["map"] + " " + data[i]["metadata"]["mode"])
+        
         for index in range(len(data)):
             try:
                 print("\n\nGetting " + data[index]["metadata"]["map"] + " " + data[index]["metadata"]["mode"])
@@ -66,7 +70,9 @@ def showPlotsMinimap(name, tag):
                         break
 
                 mapImage = image.imread(r"Maps\{}.png".format(data[index]["metadata"]["map"]))
-
+                number = 0
+                plt.imshow(mapImage)
+                plt.title(data[index]["metadata"]["map"] + " " + data[index]["metadata"]["mode"])
                 # print("Getting match coordinates...")
                 for i in range(len(data[index]["rounds"])):
                     rounds = data[index]["rounds"][i]
@@ -77,11 +83,19 @@ def showPlotsMinimap(name, tag):
                             victimLocationYBefore = playerStats["kill_events"][k]["victim_death_location"]["y"]
                             victimLocationX = int(((victimLocationYBefore * xMultiplier) + xScalarToAdd) * 1024)
                             victimLocationY = int(((victimLocationXBefore * yMultiplier) + yScalarToAdd) * 1024)
-                            plt.plot(victimLocationX, victimLocationY, marker='o', color=generate_color())
+                            killer_puuid = playerStats["kill_events"][k]["killer_puuid"]
+                            for l in range(len(playerStats["kill_events"][k]["player_locations_on_kill"])):
+                                if playerStats["kill_events"][k]["player_locations_on_kill"][l]["player_puuid"] == killer_puuid:
+                                    killerLocationXBefore = playerStats["kill_events"][k]["player_locations_on_kill"][l]["location"]["x"]
+                                    killerLocationYBefore = playerStats["kill_events"][k]["player_locations_on_kill"][l]["location"]["y"]
+                                    killerLocationX = int(((killerLocationYBefore * xMultiplier) + xScalarToAdd) * 1024)
+                                    killerLocationY = int(((killerLocationXBefore * yMultiplier) + yScalarToAdd) * 1024)
+                                    plt.plot(killerLocationX, killerLocationY, marker='o', color="red", markersize=4)
+                                    plt.plot(victimLocationX, victimLocationY, marker='o', color="blue", markersize=4)
+                                    number += 1
+                                    plt.title(data[index]["metadata"]["map"] + " " + data[index]["metadata"]["mode"]+ ", plotted " + str(number) + " dots")
+                                    plt.pause(0.001)
                             # print(str(victimLocationX) + " " + str(victimLocationY))
-                plt.ylabel(data[index]["metadata"]["map"])
-                plt.xlabel(data[index]["metadata"]["mode"])
-                plt.imshow(mapImage)
                 plt.show()
             except Exception as e:
                 print("Error getting " + data[index]["metadata"]["map"] + " " + data[index]["metadata"]["mode"])
@@ -89,6 +103,72 @@ def showPlotsMinimap(name, tag):
     except Exception as e:
         print("Error getting matches of " + name+ ", probably because the user has no matches or doesnt exist")
         print(f"Due to {e}")
+
+
+def findComomonMap(name, tag):
+    url = f"https://api.henrikdev.xyz/valorant/v3/matches/eu/{name}/{tag}?size=10" # just using Henriks cuz I cba parsing thru Ritos lol
+    data = requests.get(url, headers={
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.67 Safari/537.36"}).json()["data"]
+    mapCount = {}
+    for i in range(len(data)):
+        map = data[i]["metadata"]["map"]
+        if map in mapCount:
+            mapCount[map] += 1
+        else:
+            mapCount[map] = 1
+    sortedMapCount = sorted(mapCount.items(), key=lambda x: x[1], reverse=True)
+    print("\nMost common map: " + sortedMapCount[0][0])
+    # print the mapCount
+    print("\n")
+    for i in range(len(sortedMapCount)):
+        print(sortedMapCount[i][0] + ": " + str(sortedMapCount[i][1]))
+    plotCommonMap(name, tag, sortedMapCount[0][0], data)
+
+
+def plotCommonMap(name, tag, map, json):
+    global mapJSON, xMultiplier, yMultiplier, xScalarToAdd, yScalarToAdd
+    print("Plotting kills and deaths of " + map)
+    mapImage = image.imread(r"Maps\{}.png".format(map))
+    number = 0
+    for index in range(len(json)):
+        for i in range(len(mapJSON)):
+            if mapJSON[i]["displayName"] == json[index]["metadata"]["map"]:
+                xScalarToAdd = mapJSON[i]["xScalarToAdd"]
+                yScalarToAdd = mapJSON[i]["yScalarToAdd"]
+                xMultiplier = mapJSON[i]["xMultiplier"]
+                yMultiplier = mapJSON[i]["yMultiplier"]
+                # Found scalar and multiplier!
+                break
+        plt.imshow(mapImage)
+        plt.title("Kills and deaths of "+ map)
+        
+        if json[index]["metadata"]["map"] == map:
+            for i in range(len(json[index]["rounds"])):
+                rounds = json[index]["rounds"][i]
+                for j in range(len(rounds["player_stats"])):
+                    playerStats = rounds["player_stats"][j]
+                    for k in range(len(playerStats["kill_events"])):
+                        victimLocationXBefore = playerStats["kill_events"][k]["victim_death_location"]["x"]
+                        victimLocationYBefore = playerStats["kill_events"][k]["victim_death_location"]["y"]
+                        victimLocationX = int(((victimLocationYBefore * xMultiplier) + xScalarToAdd) * 1024)
+                        victimLocationY = int(((victimLocationXBefore * yMultiplier) + yScalarToAdd) * 1024)
+                        
+                        killer_puuid = playerStats["kill_events"][k]["killer_puuid"]
+                        for l in range(len(playerStats["kill_events"][k]["player_locations_on_kill"])):
+                            if playerStats["kill_events"][k]["player_locations_on_kill"][l]["player_puuid"] == killer_puuid:
+                                killerLocationXBefore = playerStats["kill_events"][k]["player_locations_on_kill"][l]["location"]["x"]
+                                killerLocationYBefore = playerStats["kill_events"][k]["player_locations_on_kill"][l]["location"]["y"]
+                                killerLocationX = int(((killerLocationYBefore * xMultiplier) + xScalarToAdd) * 1024)
+                                killerLocationY = int(((killerLocationXBefore * yMultiplier) + yScalarToAdd) * 1024)
+                                plt.plot(killerLocationX, killerLocationY, marker='o', color='red', markersize=2)
+                                plt.plot(victimLocationX, victimLocationY, marker='o', color='blue', markersize=2)
+                                plt.title("Plotted " + str(number) + " dots")
+                                number +=1
+                                plt.pause(0.001)
+    print("Number of dots: " + str(number))
+    plt.show()
+   
+
 
 def downloadWeapons():
     try:
@@ -239,6 +319,7 @@ def menu():
         print("4. Download Player cards")
         print("5. Download Sprays")
         print("6. Show minimap plots")
+        print("7. Find common map")
         print(f"{EVERYTHING}. Download all O_o")
         print(f"{QUIT}. Quit Console")
         ans = int(input("Answer: "))
@@ -254,9 +335,15 @@ def menu():
             downloadSprays()
         elif ans == 6:
             downloadMaps()
-            print("Enter Valorant Username:")
-            name = input("Answer: ").split("#")
+            input("Press enter to continue...")
             showPlotsMinimap(name[0], name[1])
+        elif ans == 7:
+            downloadMaps()
+            try:
+                input("Press enter to continue...")
+                findComomonMap(name[0], name[1])
+            except:
+                print("Error finding common map")
         elif ans == EVERYTHING:
             print("\nDownloading everything...\n")
             downloadWeapons()
@@ -272,6 +359,7 @@ def menu():
 
     print("Thank you for using the console! Enter to exit")
     input()
+
 
 print("Welcome to the Valorant Console. It is reccomended you put this file in a new folder as all assets will be downloaded into the same place!")
 print("More assets to come soon.")
